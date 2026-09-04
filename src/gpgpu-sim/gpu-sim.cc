@@ -81,7 +81,9 @@ class gpgpu_sim_wrapper {};
 #include <sstream>
 #include <string>
 
-// #define MAX(a, b) (((a) > (b)) ? (a) : (b)) //redefined
+#ifndef MAX
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#endif
 
 bool g_interactive_debugger_enabled = false;
 
@@ -1253,9 +1255,13 @@ void gpgpu_sim::update_stats() {
   gpu_occupancy = occupancy_stats();
 }
 
+#ifdef GPGPUSIM_POWER_MODEL
 PowerscalingCoefficients *gpgpu_sim::get_scaling_coeffs() {
   return m_gpgpusim_wrapper->get_scaling_coeffs();
 }
+#else
+PowerscalingCoefficients *gpgpu_sim::get_scaling_coeffs() { return NULL; }
+#endif
 
 void gpgpu_sim::print_stats(unsigned long long streamID) {
   gpgpu_ctx->stats->ptx_file_line_stats_write_file();

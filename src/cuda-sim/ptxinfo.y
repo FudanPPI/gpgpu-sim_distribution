@@ -128,6 +128,7 @@ info: 	  USED INT_OPERAND REGS { ptxinfo_regs($2); }
 	| INT_OPERAND BYTES CMEM { ptxinfo_cmem($1,0); }
 	| INT_OPERAND REGS { ptxinfo_regs($1); }
 	| INT_OPERAND TEXTURES {}
+	| IDENTIFIER INT_OPERAND IDENTIFIER { /* ignore (e.g., "used N barriers" in CUDA 12 ptxas) */ }
 	;
 
 tuple: INT_OPERAND PLUS INT_OPERAND BYTES { g_declared=$1; g_system=$3; }
