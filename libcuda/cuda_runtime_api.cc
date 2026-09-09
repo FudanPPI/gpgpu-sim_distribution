@@ -5437,6 +5437,7 @@ CUresult CUDAAPI cuPointerGetAttribute(void *data,
 #endif /* CUDART_VERSION >= 4000 */
 
 #if CUDART_VERSION >= 8000
+extern "C" {
 __host__ cudaError_t CUDARTAPI cudaCreateTextureObject(
     cudaTextureObject_t *pTexObject, const cudaResourceDesc *pResDesc,
     const cudaTextureDesc *pTexDesc, const cudaResourceViewDesc *pResViewDesc) {
@@ -5446,6 +5447,7 @@ __host__ cudaError_t CUDARTAPI cudaCreateTextureObject(
   cuda_not_implemented(__my_func__, __LINE__);
   return g_last_cudaError = cudaSuccess;
 }
+} /* extern "C" */
 
 CUresult CUDAAPI cuMemPrefetchAsync(CUdeviceptr devPtr, size_t count,
                                     CUdevice dstDevice, CUstream hStream) {
