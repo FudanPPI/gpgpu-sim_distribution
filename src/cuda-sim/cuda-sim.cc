@@ -1753,6 +1753,10 @@ void cuda_sim::init_inst_classification_stat() {
       StatCreate(kernelname, 1, 100);
 }
 
+// Forward declaration for texture object lookup (defined in cuda_runtime_api.cc)
+extern "C" struct cudaArray *gpgpusim_getTextureObjectArray(
+    cudaTextureObject_t handle);
+
 static unsigned get_tex_datasize(const ptx_instruction *pI,
                                  ptx_thread_info *thread) {
   const operand_info &src1 = pI->src1();  // the name of the texture
@@ -1765,8 +1769,20 @@ static unsigned get_tex_datasize(const ptx_instruction *pI,
         thread->get_operand_value(src1, dst, pI->get_type(), thread, 1);
     addr_t sym_addr = src1_data.u64;
     symbol *texRef = thread->get_symbol_table()->lookup_by_addr(sym_addr);
-    assert(texRef != NULL);
-    texname = texRef->name();
+    if (texRef != NULL) {
+      texname = texRef->name();
+    } else {
+      // CUDA 12 texture object: the register holds an opaque handle
+      // returned by cudaCreateTextureObject(), not a symbol address.
+      struct cudaArray *texObjArray =
+          gpgpusim_getTextureObjectArray((cudaTextureObject_t)sym_addr);
+      if (texObjArray != NULL) {
+        return (texObjArray->desc.x + texObjArray->desc.y +
+                texObjArray->desc.z + texObjArray->desc.w) /
+               8;
+      }
+      assert(texRef != NULL);
+    }
   }
 
   /*

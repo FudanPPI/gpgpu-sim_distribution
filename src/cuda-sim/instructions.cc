@@ -6094,9 +6094,17 @@ void tex_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
           x = thread->get_gpu()->gpgpu_ctx->func_sim->ptx_tex_regs[0].s32;
         }
 
-        unsigned tex_array_index = tex_array_base + x;
-        unsigned elem_size = texObjArray->desc.x / 8;
-        if (elem_size == 0) elem_size = 4;
+        // tex1Dfetch coordinates are texel indices; scale to a byte offset
+        // (matches the legacy textureReference path below).
+        unsigned channel_bytes = texObjArray->desc.x / 8;
+        if (channel_bytes == 0) channel_bytes = 4;
+        unsigned texel_bytes =
+            (texObjArray->desc.x + texObjArray->desc.y +
+             texObjArray->desc.z + texObjArray->desc.w) /
+            8;
+        if (texel_bytes == 0) texel_bytes = channel_bytes;
+        unsigned tex_array_index = tex_array_base + (unsigned)x * texel_bytes;
+        unsigned elem_size = channel_bytes;
 
         // Read texel from global memory
         mem->read(tex_array_index, elem_size, &data1.u32);
