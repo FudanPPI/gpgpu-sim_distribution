@@ -6045,8 +6045,11 @@ void textureNormalizeOutput(const struct cudaChannelFormatDesc &desc,
   }
 }
 
+// Forward declaration for texture object lookup (defined in cuda_runtime_api.cc)
+extern "C" struct cudaArray *gpgpusim_getTextureObjectArray(cudaTextureObject_t handle);
+
 void tex_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
-#if (CUDART_VERSION <= 1200)
+#if 1  // Enabled for all CUDA versions
   unsigned dimension = pI->dimension();
   const operand_info &dst =
       pI->dst();  // the registers to which fetched texel will be placed
@@ -6063,8 +6066,56 @@ void tex_impl(const ptx_instruction *pI, ptx_thread_info *thread) {
         thread->get_operand_value(src1, dst, pI->get_type(), thread, 1);
     addr_t sym_addr = src1_data.u64;
     symbol *texRef = thread->get_symbol_table()->lookup_by_addr(sym_addr);
-    assert(texRef != NULL);
-    texname = texRef->name();
+    if (texRef != NULL) {
+      texname = texRef->name();
+    } else {
+      // Texture object handle: look up in the texture object registry
+      struct cudaArray *texObjArray = gpgpusim_getTextureObjectArray((cudaTextureObject_t)sym_addr);
+      if (texObjArray != NULL) {
+        // Directly use the texture object's cudaArray
+        unsigned to_type2 = pI->get_type();
+        unsigned c_type2 = pI->get_type2();
+        ptx_reg_t data1, data2, data3, data4;
+        if (!thread->get_gpu()->gpgpu_ctx->func_sim->ptx_tex_regs)
+          thread->get_gpu()->gpgpu_ctx->func_sim->ptx_tex_regs = new ptx_reg_t[4];
+        unsigned nelem = src2.get_vect_nelem();
+        thread->get_vector_operand_values(
+            src2, thread->get_gpu()->gpgpu_ctx->func_sim->ptx_tex_regs, nelem);
+
+        memory_space *mem = thread->get_global_memory();
+        unsigned tex_array_base = texObjArray->devPtr32;
+        unsigned width = texObjArray->width;
+        unsigned height = texObjArray->height;
+
+        int x = 0;
+        if (dimension == GEOM_MODIFIER_1D) {
+          x = thread->get_gpu()->gpgpu_ctx->func_sim->ptx_tex_regs[0].s32;
+        } else {
+          x = thread->get_gpu()->gpgpu_ctx->func_sim->ptx_tex_regs[0].s32;
+        }
+
+        unsigned tex_array_index = tex_array_base + x;
+        unsigned elem_size = texObjArray->desc.x / 8;
+        if (elem_size == 0) elem_size = 4;
+
+        // Read texel from global memory
+        mem->read(tex_array_index, elem_size, &data1.u32);
+        if (texObjArray->desc.y > 0) {
+          mem->read(tex_array_index + elem_size, texObjArray->desc.y / 8, &data2.u32);
+        }
+        if (texObjArray->desc.z > 0) {
+          mem->read(tex_array_index + 2 * elem_size, texObjArray->desc.z / 8, &data3.u32);
+        }
+        if (texObjArray->desc.w > 0) {
+          mem->read(tex_array_index + 3 * elem_size, texObjArray->desc.w / 8, &data4.u32);
+        }
+
+        // Write results to destination registers
+        thread->set_vector_operand_values(dst, data1, data2, data3, data4);
+        thread->m_last_memory_space = tex_space;
+        return;
+      }
+    }
   }
 
   unsigned to_type = pI->get_type();

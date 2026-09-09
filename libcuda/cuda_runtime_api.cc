@@ -1938,11 +1938,15 @@ cudaDeviceGetAttributeInternal(int *value, enum cudaDeviceAttr attr, int device,
 }
 #endif
 
+// Texture object registry: handle -> cudaArray mapping
+static std::map<cudaTextureObject_t, struct cudaArray *> g_textureObjectMap;
+static unsigned int g_nextTextureHandle = 1;
+
 __host__ cudaError_t CUDARTAPI cudaBindTextureInternal(
     size_t *offset, const struct textureReference *texref, const void *devPtr,
     const struct cudaChannelFormatDesc *desc, size_t size __dv(UINT_MAX),
     gpgpu_context *gpgpu_ctx = NULL) {
-#if (CUDART_VERSION <= 1200)
+#if 1  // Enabled for all CUDA versions
   gpgpu_context *ctx;
   if (gpgpu_ctx) {
     ctx = gpgpu_ctx;
@@ -1986,7 +1990,7 @@ __host__ cudaError_t CUDARTAPI cudaBindTextureInternal(
 __host__ cudaError_t CUDARTAPI cudaBindTextureToArrayInternal(
     const struct textureReference *texref, const struct cudaArray *array,
     const struct cudaChannelFormatDesc *desc, gpgpu_context *gpgpu_ctx = NULL) {
-#if (CUDART_VERSION <= 1200)
+#if 1  // Enabled for all CUDA versions
   gpgpu_context *ctx;
   if (gpgpu_ctx) {
     ctx = gpgpu_ctx;
@@ -2010,7 +2014,7 @@ __host__ cudaError_t CUDARTAPI cudaBindTextureToArrayInternal(
 
 __host__ cudaError_t CUDARTAPI cudaUnbindTextureInternal(
     const struct textureReference *texref, gpgpu_context *gpgpu_ctx = NULL) {
-#if (CUDART_VERSION <= 1200)
+#if 1  // Enabled for all CUDA versions
   gpgpu_context *ctx;
   if (gpgpu_ctx) {
     ctx = gpgpu_ctx;
@@ -5444,10 +5448,48 @@ __host__ cudaError_t CUDARTAPI cudaCreateTextureObject(
   if (g_debug_execution >= 3) {
     announce_call(__my_func__);
   }
-  cuda_not_implemented(__my_func__, __LINE__);
+  // Create a cudaArray from the resource descriptor and register it
+  struct cudaArray *array = (struct cudaArray *)malloc(sizeof(struct cudaArray));
+  memset(array, 0, sizeof(*array));
+
+  if (pResDesc->resType == cudaResourceTypeLinear) {
+    array->devPtr = pResDesc->res.linear.devPtr;
+    array->devPtr32 = (int)(long long)pResDesc->res.linear.devPtr;
+    array->desc = pResDesc->res.linear.desc;
+    array->size = pResDesc->res.linear.sizeInBytes;
+    array->width = pResDesc->res.linear.sizeInBytes;
+    array->height = 1;
+    array->dimensions = 1;
+  } else if (pResDesc->resType == cudaResourceTypeArray) {
+    struct cudaArray *src = (struct cudaArray *)pResDesc->res.array.array;
+    *array = *src;  // copy all fields
+  } else {
+    // Unsupported resource type, return a dummy
+    *pTexObject = 0;
+    return g_last_cudaError = cudaSuccess;
+  }
+
+  // Allocate a unique texture object handle
+  cudaTextureObject_t handle = (cudaTextureObject_t)g_nextTextureHandle++;
+  g_textureObjectMap[handle] = array;
+
+  printf("GPGPU-Sim PTX: cudaCreateTextureObject handle=%llu devPtr=%p devPtr32=0x%x size=%zu\n",
+         (unsigned long long)handle, array->devPtr, array->devPtr32, array->size);
+
+  *pTexObject = handle;
   return g_last_cudaError = cudaSuccess;
 }
 } /* extern "C" */
+
+// Lookup function for tex_impl to find texture object by handle
+extern "C" struct cudaArray *gpgpusim_getTextureObjectArray(cudaTextureObject_t handle) {
+  std::map<cudaTextureObject_t, struct cudaArray *>::iterator it =
+      g_textureObjectMap.find(handle);
+  if (it != g_textureObjectMap.end()) {
+    return it->second;
+  }
+  return NULL;
+}
 
 CUresult CUDAAPI cuMemPrefetchAsync(CUdeviceptr devPtr, size_t count,
                                     CUdevice dstDevice, CUstream hStream) {

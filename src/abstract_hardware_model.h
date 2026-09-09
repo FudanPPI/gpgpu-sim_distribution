@@ -521,7 +521,15 @@ struct cudaArray {
   unsigned dimensions;
 };
 
-#endif
+#endif  // #if !defined(__CUDA_RUNTIME_API_H__)
+
+// Provide textureReference definition since CUDA 12 makes it opaque
+struct textureReference {
+  int normalized;
+  enum cudaTextureFilterMode filterMode;
+  enum cudaTextureAddressMode addressMode[2];
+  struct cudaChannelFormatDesc channelDesc;
+};
 
 // Struct that record other attributes in the textureReference declaration
 // - These attributes are passed thru __cudaRegisterTexture()
