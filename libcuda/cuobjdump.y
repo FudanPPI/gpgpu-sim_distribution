@@ -104,10 +104,20 @@ headerinfo :	H_SEPARATOR NEWLINE
 				H_PRODUCER H_UNKNOWN NEWLINE
 				H_HOST IDENTIFIER NEWLINE
 				H_COMPILESIZE IDENTIFIER  {setCuobjdumparch($4, cuobjdumpSectionList);};
-			|   H_SEPARATOR NEWLINE
+			|	H_SEPARATOR NEWLINE
 				H_ARCH IDENTIFIER NEWLINE
 				H_CODEVERSION CODEVERSION NEWLINE
 				H_PRODUCER IDENTIFIER NEWLINE
+				H_HOST IDENTIFIER NEWLINE
+				H_COMPILESIZE IDENTIFIER {setCuobjdumparch($4, cuobjdumpSectionList);};
+			/* CUDA 12.x dropped the producer line from fatbin headers
+			   (observed with the CUDA 12.8 toolkit: arch / code version /
+			   host / compile_size only, optionally followed by a compressed
+			   marker and ptxasOptions). $4 keeps its position: the producer
+			   triple sat strictly after the arch identifier. */
+			|	H_SEPARATOR NEWLINE
+				H_ARCH IDENTIFIER NEWLINE
+				H_CODEVERSION CODEVERSION NEWLINE
 				H_HOST IDENTIFIER NEWLINE
 				H_COMPILESIZE IDENTIFIER {setCuobjdumparch($4, cuobjdumpSectionList);};
 
